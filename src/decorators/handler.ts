@@ -1,9 +1,15 @@
+import { StatusCodes } from 'http-status-codes';
 import { NextApiRequest, NextApiResponse } from 'next';
-import { match } from 'path-to-regexp';
 import 'reflect-metadata';
 import { container } from 'tsyringe';
+import { handlingRedirectRoute } from '../utils/handling-redirect';
+import { checkRoute } from '../utils/match-route';
 import { IRoutes, ROUTES } from './method.decorator';
-import { IParam, SupportedDecorators, SupportedType } from './param.decorator';
+import {
+  CLASS_MIDDLEWARE,
+  IMiddleware,
+  METHOD_MIDDLEWARE,
+} from './middleware.decorator';
 export const handler = (
   Controller: Function,
   databaseRegister?: () => void
@@ -11,45 +17,53 @@ export const handler = (
   if (databaseRegister) {
     databaseRegister();
   }
+  // register the controller into the tsyringe container to perform dependency injection
   //@ts-ignore
   container.resolve(Controller);
-  //@ts-ignore
-  const instance = new Controller();
-  const path: string = Reflect.getMetadata('controller:prefix', Controller);
+
+  // this will return the handler with routes which next.js can read and forward request
   return async (req: NextApiRequest, res: NextApiResponse) => {
+    const classMiddleware: IMiddleware[] = Reflect.getMetadata(
+      CLASS_MIDDLEWARE,
+      Controller
+    );
+    const methodMiddleware: IMiddleware[] = Reflect.getMetadata(
+      METHOD_MIDDLEWARE,
+      Controller
+    );
+    if (classMiddleware) {
+      for (const { method } of classMiddleware) {
+        try {
+          const result = await method(req, res);
+          if (result) return res.status(StatusCodes.OK).json(result);
+        } catch (error) {
+          // @ts-ignore
+          return res.status(404).json(error);
+        }
+      }
+    }
+    // get all the routes from the metadata of the controller class
     const routes: IRoutes[] = Reflect.getMetadata(ROUTES, Controller);
     for (const route of routes) {
-      let fullPath = '/' + path;
-      if (route.path.length > 0) {
-        fullPath += '/' + route.path;
+      if (methodMiddleware && methodMiddleware.length > 0) {
+        const filteredMethod = methodMiddleware.filter(
+          middleware => middleware.key === route.name
+        );
+        for (const { method } of filteredMethod) {
+          try {
+            const result = method(req, res);
+            if (result) return res.status(StatusCodes.OK).json(result);
+          } catch (error) {
+            // @ts-ignore
+            return res.status(404).json(error);
+          }
+        }
       }
 
-      const matchUrl = match(fullPath, { decode: decodeURIComponent });
-      const matchResult = matchUrl(req.url!);
+      const matchResult = checkRoute(Controller, route, req.url!);
 
       if (req.method === route.method && matchResult) {
-        let params: IParam[] =
-          Reflect.getMetadata(SupportedDecorators.METHOD_PARAM, Controller) ||
-          [];
-        let bodies: IParam[] =
-          Reflect.getMetadata(SupportedDecorators.BODY, Controller) || [];
-        params = params.filter(item => item.ownerName === route.name);
-        bodies = bodies.filter(item => item.ownerName === route.name);
-        const paramList = [...params, ...bodies];
-        paramList.sort((a, b) => a.index - b.index);
-
-        const methodParams = paramList.map(item => {
-          if (item.type === SupportedType.PARAM) {
-            // @ts-ignore
-            return matchResult.params[item.path!];
-          }
-          if (item.type === SupportedType.BODY) {
-            return req.body;
-          }
-        });
-
-        const result = await instance[route.name](...methodParams);
-        return res.json(result);
+        handlingRedirectRoute(Controller, route, req, res);
       }
     }
   };

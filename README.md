@@ -120,6 +120,52 @@ Dependency Injection(DI)
 
 ```
 
+## Middleware
+Basic usage
+```ts
+// pages/api/hello.ts
+import { UseMiddleware, Controller, Get, registerController } from 'nextjs-decorators'
+
+@UseMiddleware((req, res) => {
+  /** do something like logic stuffs */
+  /** Middleware at class level will apply its logic to all route in class */
+  console.log(`${new Date()} - IP: ${req.ip} URL: ${req.URL}`)
+  })   
+@Controller("api/hello")
+class MyAwesomeController{
+
+    @Get()
+    @UseMiddleware(()=> {
+      console.log("route middleware get executed")    
+    })
+    saySomethingObvious(){
+      return { message: "you are awesome" }
+    }
+}
+
+export default registerController(MyAwesomeController)
+```
+WARNING: return statement in middleware will return immediately to the client, for example
+
+```ts
+// pages/api/hello.ts
+import { UseMiddleware, Controller, Get, registerController } from 'nextjs-decorators'
+
+@Controller("api/hello")
+class MyAwesomeController{
+
+    @Get()
+    @UseMiddleware(()=> {
+      return { message: "return at middleware" }  // <-- this is the result which client will receive
+    })
+    saySomethingObvious(){
+      return { message: "you are awesome" } // <-- in fact this will never get executed
+    }
+}
+
+export default registerController(MyAwesomeController)
+```
+
 
 
 ## Author
