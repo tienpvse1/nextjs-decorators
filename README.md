@@ -7,8 +7,8 @@
   <a href="#" target="_blank">
     <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   </a>
-  <a href="https://twitter.com/tienpvse" target="_blank">
-    <img alt="Twitter: tienpvse" src="https://img.shields.io/twitter/follow/tienpvse.svg?style=social" />
+  <a href="https://twitter.com/Tin38662979" target="_blank">
+    <img alt="Twitter: Tin38662979" src="https://img.shields.io/twitter/follow/Tin38662979.svg?style=social" />
   </a>
 </p>
 
@@ -166,13 +166,38 @@ class MyAwesomeController{
 export default registerController(MyAwesomeController)
 ```
 
+## Guard
+Guard is pretty much like Middleware, how ever it accept return type of boolean, if falsy value is returned
+it will throw an Unauthorize exception, and cannot access the desired route
 
+```ts
+// pages/api/hello.ts
+import { UseGuard, Controller, Get, registerController, Request } from 'nextjs-decorators'
+import { NextApiRequest } from 'next'
+
+@UseGuard((req: Request)=> {
+  const user = database.user.findOne({ id: req.query.id }) 
+  req.user = user
+  return user;// <- throw Unauthorize exception if user not found in database
+})
+@Controller("api/hello")
+class MyAwesomeController{
+
+    @Get()
+    @UseGuard(()=> user.role !== 'admin' /** access the user from the request we've set above */)
+    adminRoute(){
+      return { message: "Hi admin" } 
+    }
+}
+
+export default registerController(MyAwesomeController)
+```
 
 ## Author
 
 👤 **tienpvse(Phan Van Tien)**
 
-- Twitter: [@tienpvse](https://twitter.com/tienpvse)
+- Twitter: [@Tin38662979](https://twitter.com/Tin38662979)
 - Github: [@tienpvse1](https://github.com/tienpvse1)
 - LinkedIn: [@tienpvse](https://linkedin.com/in/tienpvse)
 
@@ -180,6 +205,4 @@ export default registerController(MyAwesomeController)
 
 Give a ⭐️ if this project helped you!
 
----
 
-_This README was generated with ❤️ by [readme-md-generator](https://github.com/kefranabg/readme-md-generator)_

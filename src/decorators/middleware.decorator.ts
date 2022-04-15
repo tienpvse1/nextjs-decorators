@@ -1,5 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-
+export enum MiddlewareType {
+  MIDDLEWARE = 'middleware',
+  GUARD = 'guard',
+}
 export const CLASS_MIDDLEWARE = 'CLASS_MIDDLEWARE';
 export const METHOD_MIDDLEWARE = 'METHOD_MIDDLEWARE';
 
@@ -7,6 +10,7 @@ export type Middleware = (req: NextApiRequest, res: NextApiResponse) => any;
 export interface IMiddleware {
   key?: string;
   method: Middleware;
+  type: MiddlewareType;
 }
 
 const generateMethodMiddleware = (
@@ -24,6 +28,7 @@ const generateMethodMiddleware = (
   middlewaresList.push({
     method: middleware,
     key: key.toString(),
+    type: MiddlewareType.MIDDLEWARE,
   });
   Reflect.defineMetadata(
     METHOD_MIDDLEWARE,
@@ -41,6 +46,7 @@ const generateClassMiddleware = (target: Object, middleware: Middleware) => {
   );
   middlewaresList.push({
     method: middleware,
+    type: MiddlewareType.MIDDLEWARE,
   });
 };
 

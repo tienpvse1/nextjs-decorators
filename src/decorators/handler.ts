@@ -1,21 +1,28 @@
+import { PrismaClient } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import { NextApiRequest, NextApiResponse } from 'next';
 import 'reflect-metadata';
 import { container } from 'tsyringe';
+import { PRISMA_CLIENT } from '../constance';
+import { Unauthorize } from '../error';
 import { handlingRedirectRoute } from '../utils/handling-redirect';
 import { checkRoute } from '../utils/match-route';
+// import { CLASS_GUARD, IGuard } from './guard.decorator';
 import { IRoutes, ROUTES } from './method.decorator';
 import {
   CLASS_MIDDLEWARE,
   IMiddleware,
   METHOD_MIDDLEWARE,
+  MiddlewareType,
 } from './middleware.decorator';
 export const handler = (
   Controller: Function,
-  databaseRegister?: () => void
+  enablePrisma = false 
 ) => {
-  if (databaseRegister) {
-    databaseRegister();
+  if (enablePrisma) {
+    container.register<PrismaClient>(PRISMA_CLIENT, {
+      useValue: new PrismaClient(),
+    });
   }
   // register the controller into the tsyringe container to perform dependency injection
   //@ts-ignore
@@ -32,13 +39,25 @@ export const handler = (
       Controller
     );
     if (classMiddleware) {
-      for (const { method } of classMiddleware) {
-        try {
-          const result = await method(req, res);
-          if (result) return res.status(StatusCodes.OK).json(result);
-        } catch (error) {
-          // @ts-ignore
-          return res.status(404).json(error);
+      const reversedMiddlewares = [...classMiddleware].reverse();
+
+      for (const { method, type } of reversedMiddlewares) {
+        if (type === MiddlewareType.MIDDLEWARE) {
+          try {
+            const result = await method(req, res);
+            if (result) return res.status(StatusCodes.OK).json(result);
+          } catch (error) {
+            // @ts-ignore
+            return res.status(error.code).json(error);
+          }
+        } else if (type === MiddlewareType.GUARD) {
+          try {
+            const result = await method(req, res);
+            if (!Boolean(result)) throw new Unauthorize();
+          } catch (error) {
+            // @ts-ignore
+            return res.status(error.code).json(error);
+          }
         }
       }
     }
@@ -46,16 +65,27 @@ export const handler = (
     const routes: IRoutes[] = Reflect.getMetadata(ROUTES, Controller);
     for (const route of routes) {
       if (methodMiddleware && methodMiddleware.length > 0) {
-        const filteredMethod = methodMiddleware.filter(
+        const reversedMiddlewares = [...methodMiddleware].reverse();
+        const filteredMethod = reversedMiddlewares.filter(
           middleware => middleware.key === route.name
         );
-        for (const { method } of filteredMethod) {
-          try {
-            const result = method(req, res);
-            if (result) return res.status(StatusCodes.OK).json(result);
-          } catch (error) {
-            // @ts-ignore
-            return res.status(404).json(error);
+        for (const { method, type } of filteredMethod) {
+          if (type === MiddlewareType.MIDDLEWARE) {
+            try {
+              const result = method(req, res);
+              if (result) return res.status(StatusCodes.OK).json(result);
+            } catch (error) {
+              // @ts-ignore
+              return res.status(404).json(error);
+            }
+          } else if (type === MiddlewareType.GUARD) {
+            try {
+              const result = await method(req, res);
+              if (!Boolean(result)) throw new Unauthorize();
+            } catch (error) {
+              // @ts-ignore
+              return res.status(error.code).json(error);
+            }
           }
         }
       }
